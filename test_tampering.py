@@ -1,13 +1,18 @@
+
 from test_api_pqc import (
     unique_user,
     register_user,
     login_user,
     client,
+    TestingSessionLocal,
 )
 
-from test_api_pqc import TestingSessionLocal
 from backend.app.models.message import Message
 
+
+# ============================================================
+# TEST: TAMPERED CIPHERTEXT MUST BE REJECTED
+# ============================================================
 
 def test_tampered_ciphertext_is_rejected():
 
@@ -30,6 +35,10 @@ def test_tampered_ciphertext_is_rejected():
 
     plaintext = "Tamper detection test"
 
+    # --------------------------------------------------------
+    # Send an encrypted message
+    # --------------------------------------------------------
+
     response = client.post(
         "/messages/send",
         headers=alice_headers,
@@ -39,39 +48,57 @@ def test_tampered_ciphertext_is_rejected():
         },
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
 
     message_id = response.json()["id"]
 
-    db = TestingSessionLocal()
+    # --------------------------------------------------------
+    # Modify the stored ciphertext
+    # --------------------------------------------------------
 
-    original_ciphertext = None
+    with TestingSessionLocal() as db:
 
-    try:
-        message = (
-            db.query(Message)
-            .filter(Message.id == message_id)
-            .first()
-        )
+        message = db.get(Message, message_id)
 
         assert message is not None
 
         original_ciphertext = message.ciphertext
 
-        # Tamper with ciphertext
-        message.ciphertext = (
-            "00" + original_ciphertext[2:]
+        # Decode the hexadecimal ciphertext into bytes.
+        ciphertext_bytes = bytearray(
+            bytes.fromhex(original_ciphertext)
         )
+
+        assert len(ciphertext_bytes) > 0
+
+        # Flip one bit in the first byte.
+        # XOR guarantees that the value changes.
+        ciphertext_bytes[0] ^= 0x01
+
+        tampered_ciphertext = ciphertext_bytes.hex()
+
+        assert tampered_ciphertext != original_ciphertext
+
+        message.ciphertext = tampered_ciphertext
 
         db.commit()
 
-        # Bob attempts to decrypt
+        # Confirm the modified ciphertext was saved.
+        db.refresh(message)
+
+        assert message.ciphertext == tampered_ciphertext
+
+    # --------------------------------------------------------
+    # Bob attempts to decrypt the tampered message
+    # --------------------------------------------------------
+
+    try:
         response = client.get(
             "/messages/",
             headers=bob_headers,
         )
 
-        assert response.status_code == 200
+        assert response.status_code == 200, response.text
 
         messages = response.json()
 
@@ -83,21 +110,19 @@ def test_tampered_ciphertext_is_rejected():
 
         assert len(target) == 1
 
-        assert (
-            target[0]["content"]
-            == "[Unable to decrypt message]"
+        assert target[0]["content"] == (
+            "[Unable to decrypt message]"
         )
 
     finally:
-        # Restore database state
-        message = (
-            db.query(Message)
-            .filter(Message.id == message_id)
-            .first()
-        )
+        # ----------------------------------------------------
+        # Restore the original ciphertext
+        # ----------------------------------------------------
 
-        if message is not None and original_ciphertext is not None:
-            message.ciphertext = original_ciphertext
-            db.commit()
+        with TestingSessionLocal() as db:
 
-        db.close()
+            message = db.get(Message, message_id)
+
+            if message is not None:
+                message.ciphertext = original_ciphertext
+                db.commit()

@@ -1,7 +1,9 @@
+
 from sqlalchemy.orm import Session
 
 from backend.app.models.user import User
 from backend.app.schemas.user import UserCreate
+
 from backend.app.core.security import (
     hash_password,
     verify_password,
@@ -13,39 +15,41 @@ from backend.app.core.pqc import (
     serialize_private_key,
 )
 
-from backend.app.core.key_store import store_private_key
 
+# ============================================================
+# CREATE USER
+# ============================================================
 
 def create_user(
     db: Session,
     user_data: UserCreate,
 ) -> User:
 
+    # --------------------------------------------------------
+    # Check whether username already exists
+    # --------------------------------------------------------
+
     existing_username = (
         db.query(User)
-        .filter(
-            User.username == user_data.username
-        )
+        .filter(User.username == user_data.username)
         .first()
     )
 
     if existing_username:
-        raise ValueError(
-            "Username already exists"
-        )
+        raise ValueError("Username already exists")
+
+    # --------------------------------------------------------
+    # Check whether email already exists
+    # --------------------------------------------------------
 
     existing_email = (
         db.query(User)
-        .filter(
-            User.email == user_data.email
-        )
+        .filter(User.email == user_data.email)
         .first()
     )
 
     if existing_email:
-        raise ValueError(
-            "Email already exists"
-        )
+        raise ValueError("Email already exists")
 
     # --------------------------------------------------------
     # Generate ML-KEM-768 key pair
@@ -62,7 +66,7 @@ def create_user(
     )
 
     # --------------------------------------------------------
-    # Serialize private key
+    # Encrypt and serialize private key
     # --------------------------------------------------------
 
     private_key_data = serialize_private_key(
@@ -70,7 +74,7 @@ def create_user(
     )
 
     # --------------------------------------------------------
-    # Create user
+    # Create database user
     # --------------------------------------------------------
 
     user = User(
@@ -84,21 +88,20 @@ def create_user(
         pqc_private_key=private_key_data,
     )
 
+    # --------------------------------------------------------
+    # Save user and encrypted keys
+    # --------------------------------------------------------
+
     db.add(user)
     db.commit()
     db.refresh(user)
 
-    # --------------------------------------------------------
-    # Keep private key available during current process
-    # --------------------------------------------------------
-
-    store_private_key(
-        user.id,
-        private_key,
-    )
-
     return user
 
+
+# ============================================================
+# AUTHENTICATE USER
+# ============================================================
 
 def authenticate_user(
     db: Session,
@@ -109,33 +112,45 @@ def authenticate_user(
     Authenticate a user.
 
     Returns:
-        (user, True)  -> username exists and password is correct
-        (user, False) -> username exists but password is wrong
-        (None, False) -> username does not exist
+        (user, True):
+            Username exists and password is correct.
 
-    Returning the user on a wrong password allows the security
-    layer to associate failed login attempts with the correct
-    account without treating the authentication as successful.
+        (user, False):
+            Username exists but password is incorrect.
+
+        (None, False):
+            Username does not exist.
+
+    Returning the user on an incorrect password allows
+    the security layer to associate failed login attempts
+    with the correct account.
     """
 
     user = (
         db.query(User)
-        .filter(
-            User.username == username
-        )
+        .filter(User.username == username)
         .first()
     )
 
+    # --------------------------------------------------------
     # Username does not exist
+    # --------------------------------------------------------
+
     if not user:
         return None, False
 
-    # Username exists but password is incorrect
+    # --------------------------------------------------------
+    # Verify password
+    # --------------------------------------------------------
+
     if not verify_password(
         password,
         user.hashed_password,
     ):
         return user, False
 
+    # --------------------------------------------------------
     # Authentication successful
+    # --------------------------------------------------------
+
     return user, True

@@ -1,5 +1,7 @@
+
 import os
 
+from cryptography.exceptions import InvalidTag
 from cryptography.hazmat.primitives.asymmetric import mlkem
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
@@ -7,14 +9,27 @@ from backend.app.core.config import settings
 
 
 # ============================================================
+# ENCRYPTION KEY CONFIGURATION
+# ============================================================
+
+try:
+    KEY = bytes.fromhex(settings.MESSAGE_ENCRYPTION_KEY)
+except ValueError as exc:
+    raise RuntimeError(
+        "MESSAGE_ENCRYPTION_KEY must be valid hexadecimal."
+    ) from exc
+
+if len(KEY) != 32:
+    raise RuntimeError(
+        "MESSAGE_ENCRYPTION_KEY must contain exactly 32 bytes."
+    )
+
+
+# ============================================================
 # ML-KEM-768 KEY GENERATION
 # ============================================================
 
 def generate_keypair():
-    """
-    Generate an ML-KEM-768 public/private key pair.
-    """
-
     private_key = mlkem.MLKEM768PrivateKey.generate()
     public_key = private_key.public_key()
 
@@ -26,15 +41,6 @@ def generate_keypair():
 # ============================================================
 
 def encapsulate(public_key):
-    """
-    Encapsulate a shared secret using the recipient's
-    ML-KEM-768 public key.
-
-    Returns:
-        shared_secret
-        ciphertext
-    """
-
     shared_secret, ciphertext = public_key.encapsulate()
 
     return shared_secret, ciphertext
@@ -44,18 +50,8 @@ def encapsulate(public_key):
 # ML-KEM-768 DECAPSULATION
 # ============================================================
 
-def decapsulate(
-    private_key,
-    ciphertext,
-):
-    """
-    Recover the shared secret using the recipient's
-    ML-KEM-768 private key.
-    """
-
-    return private_key.decapsulate(
-        ciphertext
-    )
+def decapsulate(private_key, ciphertext):
+    return private_key.decapsulate(ciphertext)
 
 
 # ============================================================
@@ -63,19 +59,10 @@ def decapsulate(
 # ============================================================
 
 def serialize_public_key(public_key) -> str:
-    """
-    Convert ML-KEM-768 public key to hexadecimal string.
-    """
-
     return public_key.public_bytes_raw().hex()
 
 
 def deserialize_public_key(data: str):
-    """
-    Convert hexadecimal public-key data back into
-    an ML-KEM-768 public-key object.
-    """
-
     return mlkem.MLKEM768PublicKey.from_public_bytes(
         bytes.fromhex(data)
     )
@@ -85,79 +72,81 @@ def deserialize_public_key(data: str):
 # PRIVATE KEY ENCRYPTION
 # ============================================================
 
-KEY = bytes.fromhex(
-    settings.MESSAGE_ENCRYPTION_KEY
-)
-
-
-if len(KEY) != 32:
-    raise RuntimeError(
-        "MESSAGE_ENCRYPTION_KEY must contain exactly 32 bytes"
-    )
-
-
-def serialize_private_key(
-    private_key,
-) -> str:
+def serialize_private_key(private_key) -> str:
     """
-    Encrypt the ML-KEM-768 private-key seed and return
-    it as a hexadecimal string for database storage.
+    Encrypt an ML-KEM-768 private-key seed using AES-256-GCM.
 
-    The database never receives the private key in plaintext.
+    Storage format:
+        12-byte nonce + encrypted seed + 16-byte GCM tag
+
+    The output is hexadecimal encoded.
+
+    This preserves compatibility with existing stored keys.
     """
 
-    # Get the raw ML-KEM private-key seed
     seed = private_key.private_bytes_raw()
 
-    # AES-GCM requires a unique nonce
     nonce = os.urandom(12)
 
-    aesgcm = AESGCM(KEY)
-
-    # Encrypt the seed
-    encrypted_seed = aesgcm.encrypt(
+    encrypted_seed = AESGCM(KEY).encrypt(
         nonce,
         seed,
         None,
     )
 
-    # Store nonce + encrypted seed together
-    return (
-        nonce + encrypted_seed
-    ).hex()
+    return (nonce + encrypted_seed).hex()
 
 
 # ============================================================
 # PRIVATE KEY DECRYPTION
 # ============================================================
 
-def deserialize_private_key(
-    data: str,
-):
+def deserialize_private_key(data: str):
     """
-    Decrypt the stored ML-KEM-768 private-key seed and
-    reconstruct the private-key object.
+    Decrypt a stored ML-KEM-768 private-key seed.
+
+    Reject malformed data, incorrect encryption keys,
+    and modified encrypted private-key material.
     """
 
-    # Convert database hexadecimal string back to bytes
-    raw = bytes.fromhex(data)
+    if not isinstance(data, str) or not data:
+        raise ValueError(
+            "Encrypted private-key data is missing."
+        )
 
-    # First 12 bytes are the AES-GCM nonce
+    try:
+        raw = bytes.fromhex(data)
+    except ValueError as exc:
+        raise ValueError(
+            "Encrypted private-key data is malformed."
+        ) from exc
+
+    # At minimum: 12-byte nonce + 16-byte authentication tag.
+    if len(raw) < 28:
+        raise ValueError(
+            "Encrypted private-key data is too short."
+        )
+
     nonce = raw[:12]
-
-    # Remaining bytes are encrypted private-key seed
     encrypted_seed = raw[12:]
 
-    aesgcm = AESGCM(KEY)
+    try:
+        seed = AESGCM(KEY).decrypt(
+            nonce,
+            encrypted_seed,
+            None,
+        )
+    except InvalidTag as exc:
+        raise ValueError(
+            "Private-key decryption failed: "
+            "invalid key or corrupted data."
+        ) from exc
 
-    # Decrypt the seed
-    seed = aesgcm.decrypt(
-        nonce,
-        encrypted_seed,
-        None,
-    )
-
-    # Reconstruct ML-KEM-768 private key
-    return mlkem.MLKEM768PrivateKey.from_seed_bytes(
-        seed
-    )
+    try:
+        return mlkem.MLKEM768PrivateKey.from_seed_bytes(
+            seed
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "Decrypted ML-KEM-768 seed is invalid."
+        ) from exc
