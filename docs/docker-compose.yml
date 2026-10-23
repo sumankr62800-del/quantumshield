@@ -1,0 +1,37 @@
+
+services:
+  db:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: quantumshield_db
+      POSTGRES_USER: quantumshield_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U quantumshield_user -d quantumshield_db
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docs/dockerfile
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:8001:8000"
+    environment:
+      DATABASE_URL: postgresql+psycopg://quantumshield_user@db:5432/quantumshield_db
+      PGPASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      MESSAGE_ENCRYPTION_KEY: ${MESSAGE_ENCRYPTION_KEY:?Set MESSAGE_ENCRYPTION_KEY}
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY}
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  postgres_data:

@@ -1,0 +1,49 @@
+
+# Environment variables and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases and backups
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.db-wal
+*.db-shm
+*backup*
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+
+# Git and IDE
+.git/
+.github/
+.idea/
+.vscode/
+
+# Frontend dependencies and builds
+frontend/node_modules/
+frontend/dist/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.bak
+
+# Local test artifacts
+.coverage
+htmlcov/

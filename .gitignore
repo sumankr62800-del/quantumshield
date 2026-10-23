@@ -101,3 +101,5 @@ desktop.ini
 # ==========================================
 .ipynb_checkpoints/
 .cache/
+
+.env.neon
