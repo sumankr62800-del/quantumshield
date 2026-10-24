@@ -1,3 +1,4 @@
+
 from sqlalchemy import Column, Integer, String, Boolean, Text
 
 from backend.app.database.connection import Base
@@ -34,6 +35,15 @@ class User(Base):
         default=True,
     )
 
+    # Role-Based Access Control
+    role = Column(
+        String(20),
+        nullable=False,
+        default="user",
+        server_default="user",
+    )
+
+    # Post-Quantum Cryptography Keys
     pqc_public_key = Column(
         Text,
         nullable=True,

@@ -1,8 +1,12 @@
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from backend.app.database.connection import get_db
-from backend.app.core.security import get_current_user_id
+from backend.app.core.security import (
+    get_current_user_id,
+    require_admin,
+)
 
 from backend.app.core.threat_detection import (
     calculate_user_risk,
@@ -15,6 +19,7 @@ from backend.app.ml.predict import (
 )
 
 from backend.app.models.security_event import SecurityEvent
+from backend.app.models.user import User
 
 
 # ============================================================
@@ -40,7 +45,6 @@ def get_my_risk(
     Return the rule-based security risk score
     for the authenticated user.
     """
-
     return calculate_user_risk(
         db=db,
         user_id=current_user_id,
@@ -48,7 +52,7 @@ def get_my_risk(
 
 
 # ============================================================
-# SECURITY EVENTS
+# CURRENT USER SECURITY EVENTS
 # ============================================================
 
 @router.get("/events")
@@ -60,7 +64,6 @@ def get_security_events(
     Return recent security events belonging only
     to the authenticated user.
     """
-
     events = (
         db.query(SecurityEvent)
         .filter(
@@ -88,19 +91,19 @@ def get_security_events(
 
 
 # ============================================================
-# GLOBAL SECURITY STATUS
+# GLOBAL SECURITY STATUS — ADMIN ONLY
 # ============================================================
 
 @router.get("/status")
 def get_security_status(
-    current_user_id: int = Depends(get_current_user_id),
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
-    Return the overall rule-based security status
-    of the QuantumShield system.
-    """
+    Return the overall rule-based security status.
 
+    Accessible only to administrators.
+    """
     return calculate_global_risk(
         db=db,
     )
@@ -116,17 +119,9 @@ def get_my_threat_prediction(
     db: Session = Depends(get_db),
 ):
     """
-    Generate an ML-based threat prediction for
-    the authenticated user.
-
-    Uses:
-        - Security event features
-        - Trained Random Forest classifier
-        - Threat probability
-        - Threat score
-        - Threat level
+    Generate an ML-based threat prediction
+    for the authenticated user.
     """
-
     return predict_user_threat(
         db=db,
         user_id=current_user_id,
@@ -134,19 +129,20 @@ def get_my_threat_prediction(
 
 
 # ============================================================
-# ML THREAT DETECTION — GLOBAL
+# ML THREAT DETECTION — GLOBAL — ADMIN ONLY
 # ============================================================
 
 @router.get("/threat/global")
 def get_global_threat_prediction(
-    current_user_id: int = Depends(get_current_user_id),
+    admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
-    Generate an ML-based threat prediction for
-    the entire QuantumShield system.
-    """
+    Generate an ML-based threat prediction
+    for the entire QuantumShield system.
 
+    Accessible only to administrators.
+    """
     return predict_global_threat(
         db=db,
     )

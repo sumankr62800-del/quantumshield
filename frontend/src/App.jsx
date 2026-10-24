@@ -1,16 +1,25 @@
+
 import { useEffect, useState } from "react";
 import "./App.css";
 
-const API = "http://127.0.0.1:8000";
+const API =
+  import.meta.env.VITE_API_BASE_URL ||
+  "http://127.0.0.1:8000";
 
 function App() {
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
 
+  const [authMode, setAuthMode] = useState("login");
+  const [registerUsername, setRegisterUsername] = useState("");
+  const [registerEmail, setRegisterEmail] = useState("");
+  const [registerPassword, setRegisterPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [registrationSuccess, setRegistrationSuccess] = useState("");
+
   const [dashboard, setDashboard] = useState(null);
   const [threat, setThreat] = useState(null);
-
   const [users, setUsers] = useState([]);
   const [messages, setMessages] = useState([]);
 
@@ -20,9 +29,16 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
   const [sending, setSending] = useState(false);
-
   const [error, setError] = useState("");
   const [messageStatus, setMessageStatus] = useState("");
+
+  function errorMessage(detail, fallback = "Request failed") {
+    if (typeof detail === "string") return detail;
+    if (Array.isArray(detail)) {
+      return detail.map((item) => item.msg || "Invalid input").join("; ");
+    }
+    return fallback;
+  }
 
   async function request(endpoint, options = {}, authToken = token) {
     const response = await fetch(`${API}${endpoint}`, {
@@ -36,7 +52,7 @@ function App() {
     const data = await response.json();
 
     if (!response.ok) {
-      throw new Error(data.detail || "Request failed");
+      throw new Error(errorMessage(data.detail));
     }
 
     return data;
@@ -70,7 +86,6 @@ function App() {
 
   async function login(e) {
     e.preventDefault();
-
     setLoading(true);
     setError("");
 
@@ -78,9 +93,9 @@ function App() {
       const response = await fetch(`${API}/auth/login`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/x-www-form-urlencoded",
         },
-        body: JSON.stringify({
+        body: new URLSearchParams({
           username,
           password,
         }),
@@ -89,11 +104,12 @@ function App() {
       const data = await response.json();
 
       if (!response.ok) {
-        throw new Error(data.detail || "Login failed");
+        throw new Error(errorMessage(data.detail, "Login failed"));
       }
 
       localStorage.setItem("token", data.access_token);
       setToken(data.access_token);
+      setPassword("");
 
       await loadData(data.access_token);
     } catch (err) {
@@ -101,6 +117,67 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  async function register(e) {
+    e.preventDefault();
+    setError("");
+    setRegistrationSuccess("");
+
+    if (registerPassword !== confirmPassword) {
+      setError("Passwords do not match.");
+      return;
+    }
+
+    if (registerPassword.length < 8) {
+      setError("Password must contain at least 8 characters.");
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const response = await fetch(`${API}/auth/register`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: registerUsername.trim(),
+          email: registerEmail.trim(),
+          password: registerPassword,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(
+          errorMessage(data.detail, "Registration failed")
+        );
+      }
+
+      setUsername(registerUsername.trim());
+      setPassword("");
+      setRegisterPassword("");
+      setConfirmPassword("");
+      setRegisterEmail("");
+      setRegisterUsername("");
+      setAuthMode("login");
+      setRegistrationSuccess(
+        "Account created successfully! Please sign in."
+      );
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function switchAuthMode(mode) {
+    setAuthMode(mode);
+    setError("");
+    setRegistrationSuccess("");
   }
 
   async function sendMessage(e) {
@@ -152,11 +229,13 @@ function App() {
     setMessages([]);
     setUsername("");
     setPassword("");
+    setError("");
   }
 
   useEffect(() => {
-    if (token) {
-      loadData(token);
+    const savedToken = localStorage.getItem("token");
+    if (savedToken) {
+      loadData(savedToken);
     }
   }, []);
 
@@ -170,13 +249,14 @@ function App() {
     return () => clearInterval(interval);
   }, [token]);
 
+  // LOGIN AND REGISTRATION
+
   if (!token) {
     return (
       <div className="login-page">
         <div className="login-card">
           <div className="brand">
             <div className="brand-icon">Q</div>
-
             <div>
               <h1>QuantumShield</h1>
               <span>Security Intelligence Platform</span>
@@ -184,49 +264,173 @@ function App() {
           </div>
 
           <div className="login-heading">
-            <h2>Secure Login</h2>
-            <p>Access your security operations dashboard.</p>
+            <h2>
+              {authMode === "register"
+                ? "Create Account"
+                : "Secure Login"}
+            </h2>
+            <p>
+              {authMode === "register"
+                ? "Join the QuantumShield security platform."
+                : "Access your security operations dashboard."}
+            </p>
           </div>
 
-          <form onSubmit={login}>
-            <label>Username</label>
+          {registrationSuccess && (
+            <div className="message-status success">
+              {registrationSuccess}
+            </div>
+          )}
 
-            <input
-              type="text"
-              placeholder="Enter username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
+          {authMode === "register" ? (
+            <form onSubmit={register}>
+              <label>Username</label>
+              <input
+                type="text"
+                placeholder="Choose a username"
+                value={registerUsername}
+                onChange={(e) =>
+                  setRegisterUsername(e.target.value)
+                }
+                autoComplete="username"
+                required
+              />
 
-            <label>Password</label>
+              <label>Email Address</label>
+              <input
+                type="email"
+                placeholder="Enter your email"
+                value={registerEmail}
+                onChange={(e) =>
+                  setRegisterEmail(e.target.value)
+                }
+                autoComplete="email"
+                required
+              />
 
-            <input
-              type="password"
-              placeholder="Enter password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="Create a strong password"
+                value={registerPassword}
+                onChange={(e) =>
+                  setRegisterPassword(e.target.value)
+                }
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+
+              <label>Confirm Password</label>
+              <input
+                type="password"
+                placeholder="Confirm your password"
+                value={confirmPassword}
+                onChange={(e) =>
+                  setConfirmPassword(e.target.value)
+                }
+                autoComplete="new-password"
+                minLength={8}
+                required
+              />
+
+              <button
+                className="login-button"
+                type="submit"
+                disabled={loading}
+              >
+                {loading
+                  ? "Creating Account..."
+                  : "Create Account"}
+              </button>
+            </form>
+          ) : (
+            <form onSubmit={login}>
+              <label>Username</label>
+              <input
+                type="text"
+                placeholder="Enter username"
+                value={username}
+                onChange={(e) =>
+                  setUsername(e.target.value)
+                }
+                autoComplete="username"
+                required
+              />
+
+              <label>Password</label>
+              <input
+                type="password"
+                placeholder="Enter password"
+                value={password}
+                onChange={(e) =>
+                  setPassword(e.target.value)
+                }
+                autoComplete="current-password"
+                required
+              />
+
+              <button
+                className="login-button"
+                type="submit"
+                disabled={loading}
+              >
+                {loading
+                  ? "Authenticating..."
+                  : "Sign In"}
+              </button>
+            </form>
+          )}
+
+          {error && (
+            <div className="error-box">{error}</div>
+          )}
+
+          <div
+            style={{
+              textAlign: "center",
+              marginTop: "20px",
+            }}
+          >
+            <span>
+              {authMode === "register"
+                ? "Already have an account? "
+                : "Don't have an account? "}
+            </span>
 
             <button
-              className="login-button"
-              type="submit"
-              disabled={loading}
+              type="button"
+              onClick={() =>
+                switchAuthMode(
+                  authMode === "register"
+                    ? "login"
+                    : "register"
+                )
+              }
+              style={{
+                background: "none",
+                border: "none",
+                color: "#3b82f6",
+                cursor: "pointer",
+                fontWeight: "bold",
+                fontSize: "14px",
+              }}
             >
-              {loading ? "Authenticating..." : "Sign In"}
+              {authMode === "register"
+                ? "Sign In"
+                : "Create Account"}
             </button>
-          </form>
-
-          {error && <div className="error-box">{error}</div>}
+          </div>
 
           <div className="login-footer">
-            🔐 Post-Quantum Security&nbsp; • &nbsp;🤖 AI Threat Detection
+            🔐 Post-Quantum Security • 🤖 AI Threat Detection
           </div>
         </div>
       </div>
     );
   }
+
+  // DASHBOARD LOADING
 
   if (loadingData && !dashboard) {
     return (
@@ -243,9 +447,11 @@ function App() {
       <div className="loading-page">
         <h2>Unable to load dashboard</h2>
         <p>{error}</p>
-
         <button onClick={() => loadData(token)}>
           Retry
+        </button>
+        <button onClick={logout}>
+          Logout and Sign In Again
         </button>
       </div>
     );
@@ -257,18 +463,18 @@ function App() {
 
   const threatScore = prediction?.threat_score ?? 0;
   const threatLevel = prediction?.threat_level ?? "LOW";
-  const threatProbability = prediction?.threat_probability ?? 0;
-  const normalProbability = prediction?.normal_probability ?? 1;
+  const threatProbability =
+    prediction?.threat_probability ?? 0;
+  const normalProbability =
+    prediction?.normal_probability ?? 1;
 
   return (
     <div className="app">
-
       {/* TOPBAR */}
 
       <header className="topbar">
         <div className="brand">
           <div className="brand-icon">Q</div>
-
           <div>
             <h1>QuantumShield</h1>
             <span>Security Operations Center</span>
@@ -276,7 +482,6 @@ function App() {
         </div>
 
         <div className="topbar-right">
-
           <div className="online-status">
             <span className="status-dot"></span>
             System Online
@@ -284,23 +489,24 @@ function App() {
 
           <div className="user-info">
             <div className="avatar">
-              {dashboard.user.username?.charAt(0).toUpperCase()}
+              {dashboard.user.username
+                ?.charAt(0)
+                .toUpperCase()}
             </div>
-
             <span>{dashboard.user.username}</span>
           </div>
 
-          <button className="logout" onClick={logout}>
+          <button
+            className="logout"
+            onClick={logout}
+          >
             Logout
           </button>
-
         </div>
       </header>
 
-
-      {/* DASHBOARD */}
-
       <main className="dashboard">
+        {/* WELCOME */}
 
         <section className="welcome">
           <div>
@@ -325,14 +531,11 @@ function App() {
           </div>
         )}
 
-
         {/* STATISTICS */}
 
         <section className="stats-grid">
-
           <div className="stat-card">
             <div className="stat-icon">👥</div>
-
             <div>
               <span>Total Users</span>
               <strong>{stats.total_users}</strong>
@@ -341,7 +544,6 @@ function App() {
 
           <div className="stat-card">
             <div className="stat-icon">✉</div>
-
             <div>
               <span>Total Messages</span>
               <strong>{stats.total_messages}</strong>
@@ -350,7 +552,6 @@ function App() {
 
           <div className="stat-card">
             <div className="stat-icon">🛡</div>
-
             <div>
               <span>Security Events</span>
               <strong>{stats.total_security_events}</strong>
@@ -359,46 +560,34 @@ function App() {
 
           <div className="stat-card">
             <div className="stat-icon">⚠</div>
-
             <div>
               <span>Failed Logins</span>
               <strong>{stats.failed_logins}</strong>
             </div>
           </div>
-
         </section>
 
-
-        {/* AI + RISK */}
+        {/* AI AND RISK */}
 
         <section className="main-grid">
-
           <div className="panel threat-panel">
-
             <div className="panel-header">
               <div>
                 <h3>AI Threat Detection</h3>
                 <p>Machine-learning security analysis</p>
               </div>
-
-              <span className="ai-badge">
-                AI MODEL
-              </span>
+              <span className="ai-badge">AI MODEL</span>
             </div>
 
             <div className="threat-content">
-
               <div className="score-circle">
-
                 <div className="score-inner">
                   <strong>{threatScore}</strong>
                   <span>/ 100</span>
                 </div>
-
               </div>
 
               <div className="threat-details">
-
                 <span className="label">
                   Current Threat Level
                 </span>
@@ -410,61 +599,54 @@ function App() {
                 </div>
 
                 <div className="probability">
-
                   <div className="probability-row">
                     <span>Threat Probability</span>
-
                     <strong>
                       {(threatProbability * 100).toFixed(1)}%
                     </strong>
                   </div>
-
                   <div className="progress">
                     <div
                       className="progress-fill"
                       style={{
-                        width: `${threatProbability * 100}%`,
+                        width: `${
+                          threatProbability * 100
+                        }%`,
                       }}
                     ></div>
                   </div>
-
                 </div>
 
                 <div className="probability">
-
                   <div className="probability-row">
                     <span>Normal Probability</span>
-
                     <strong>
                       {(normalProbability * 100).toFixed(1)}%
                     </strong>
                   </div>
-
                   <div className="progress">
                     <div
                       className="progress-fill normal"
                       style={{
-                        width: `${normalProbability * 100}%`,
+                        width: `${
+                          normalProbability * 100
+                        }%`,
                       }}
                     ></div>
                   </div>
-
                 </div>
 
                 <p className="model-name">
                   Model:{" "}
                   <strong>
-                    {prediction?.model || "Random Forest"}
+                    {prediction?.model || "Not available"}
                   </strong>
                 </p>
-
               </div>
             </div>
           </div>
 
-
           <div className="panel risk-panel">
-
             <div className="panel-header">
               <div>
                 <h3>Security Risk</h3>
@@ -484,7 +666,6 @@ function App() {
             </div>
 
             <div className="risk-stats">
-
               <div>
                 <span>Events</span>
                 <strong>{risk.event_count}</strong>
@@ -499,49 +680,34 @@ function App() {
                 <span>Critical</span>
                 <strong>{risk.critical_events}</strong>
               </div>
-
             </div>
 
             <div className="risk-window">
               Analysis window: {risk.window_minutes} minutes
             </div>
-
           </div>
-
         </section>
-
 
         {/* SECURE MESSAGING */}
 
         <section className="panel messaging-panel">
-
           <div className="panel-header">
-
             <div>
               <h3>🔐 Secure Communication</h3>
-
               <p>
                 Post-quantum encrypted messaging using ML-KEM
               </p>
             </div>
-
             <span className="secure-badge">
               PQC SECURED
             </span>
-
           </div>
 
-
           <div className="messaging-container">
-
-            {/* SEND */}
-
             <div className="message-compose">
-
               <h4>Send Secure Message</h4>
 
               <form onSubmit={sendMessage}>
-
                 <label>Recipient</label>
 
                 <select
@@ -550,7 +716,6 @@ function App() {
                     setSelectedUser(e.target.value)
                   }
                 >
-
                   <option value="">
                     Select a user
                   </option>
@@ -566,15 +731,14 @@ function App() {
                         : " — AES Fallback"}
                     </option>
                   ))}
-
                 </select>
-
 
                 {selectedUser && (
                   <div className="encryption-info">
-
                     {users.find(
-                      (u) => String(u.id) === String(selectedUser)
+                      (u) =>
+                        String(u.id) ===
+                        String(selectedUser)
                     )?.pqc_enabled ? (
                       <>
                         <span>✓</span>
@@ -586,10 +750,8 @@ function App() {
                         PQC unavailable — AES encryption will be used
                       </>
                     )}
-
                   </div>
                 )}
-
 
                 <label>Message</label>
 
@@ -602,7 +764,6 @@ function App() {
                   }
                 ></textarea>
 
-
                 <button
                   className="send-button"
                   type="submit"
@@ -612,9 +773,7 @@ function App() {
                     ? "Encrypting..."
                     : "🔐 Encrypt & Send"}
                 </button>
-
               </form>
-
 
               {messageStatus && (
                 <div
@@ -627,42 +786,28 @@ function App() {
                   {messageStatus}
                 </div>
               )}
-
             </div>
-
 
             {/* MESSAGE HISTORY */}
 
             <div className="message-history">
-
               <div className="history-header">
                 <h4>Message History</h4>
-
                 <span>
                   {messages.length} messages
                 </span>
               </div>
 
-
               {messages.length === 0 ? (
-
                 <div className="empty-messages">
                   <span>🔒</span>
-
-                  <p>
-                    No messages yet.
-                  </p>
-
+                  <p>No messages yet.</p>
                 </div>
-
               ) : (
-
                 <div className="messages-list">
-
                   {[...messages]
                     .reverse()
                     .map((message) => {
-
                       const sent =
                         message.sender_id ===
                         dashboard.user.id;
@@ -674,9 +819,7 @@ function App() {
                           }`}
                           key={message.id}
                         >
-
                           <div className="message-meta">
-
                             <strong>
                               {sent
                                 ? "You"
@@ -690,49 +833,35 @@ function App() {
                                   ).toLocaleString()
                                 : ""}
                             </span>
-
                           </div>
-
 
                           <div className="message-bubble">
                             {message.content}
                           </div>
 
-
                           <div className="message-security">
                             🔐 Decrypted securely
                           </div>
-
                         </div>
                       );
                     })}
-
                 </div>
-
               )}
-
             </div>
-
           </div>
-
         </section>
-
 
         {/* SECURITY ACTIVITY */}
 
         <section className="panel activity-panel">
-
           <div className="panel-header">
-
             <div>
               <h3>Security Activity</h3>
               <p>Event severity distribution</p>
             </div>
-
           </div>
 
           <div className="severity-grid">
-
             <div className="severity-item critical">
               <span>Critical</span>
               <strong>
@@ -760,21 +889,15 @@ function App() {
                 {stats.low_severity_events}
               </strong>
             </div>
-
           </div>
-
         </section>
 
-
-        {/* EVENTS */}
+        {/* RECENT EVENTS */}
 
         <section className="panel events-panel">
-
           <div className="panel-header">
-
             <div>
               <h3>Recent Security Events</h3>
-
               <p>
                 Latest activity detected by QuantumShield
               </p>
@@ -783,12 +906,9 @@ function App() {
             <span className="event-count">
               {dashboard.recent_events?.length || 0} events
             </span>
-
           </div>
 
-
           {dashboard.recent_events?.length === 0 ? (
-
             <div className="empty-state">
               <span>✓</span>
               <h4>No Recent Security Events</h4>
@@ -796,56 +916,46 @@ function App() {
                 Your account has no recent suspicious activity.
               </p>
             </div>
-
           ) : (
-
             <div className="events-list">
-
-              {dashboard.recent_events.map((event) => (
-
-                <div
-                  className="event-row"
-                  key={event.id}
-                >
-
-                  <div className="event-indicator"></div>
-
-                  <div className="event-info">
-
-                    <strong>
-                      {event.event_type}
-                    </strong>
-
-                    <p>
-                      {event.description}
-                    </p>
-
-                    <small>
-                      {event.created_at
-                        ? new Date(
-                            event.created_at
-                          ).toLocaleString()
-                        : "Unknown time"}
-                    </small>
-
-                  </div>
-
-                  <span
-                    className={`event-badge ${event.severity.toLowerCase()}`}
+              {(dashboard.recent_events || []).map(
+                (event) => (
+                  <div
+                    className="event-row"
+                    key={event.id}
                   >
-                    {event.severity}
-                  </span>
+                    <div className="event-indicator"></div>
 
-                </div>
+                    <div className="event-info">
+                      <strong>
+                        {event.event_type}
+                      </strong>
 
-              ))}
+                      <p>{event.description}</p>
 
+                      <small>
+                        {event.created_at
+                          ? new Date(
+                              event.created_at
+                            ).toLocaleString()
+                          : "Unknown time"}
+                      </small>
+                    </div>
+
+                    <span
+                      className={`event-badge ${
+                        event.severity?.toLowerCase() ||
+                        "low"
+                      }`}
+                    >
+                      {event.severity}
+                    </span>
+                  </div>
+                )
+              )}
             </div>
-
           )}
-
         </section>
-
 
         <footer className="footer">
           QuantumShield v1.0.0
@@ -854,7 +964,6 @@ function App() {
           <span>•</span>
           AI Threat Detection
         </footer>
-
       </main>
     </div>
   );
