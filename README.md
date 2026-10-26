@@ -285,7 +285,9 @@ Further improvements may include:
 - Additional automated security tests.
 - Further deployment hardening.
 
-## 👨‍💻 Author
+## 👨‍💻 Author : suman kumar
+
+
 
 Developed as a full-stack cybersecurity and post-quantum cryptography portfolio project.
 
