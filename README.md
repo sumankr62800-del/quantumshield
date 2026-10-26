@@ -263,6 +263,8 @@ Further improvements may include:
 
 ## 📸 Screenshots
 
+<img width="580" height="832" alt="image" src="https://github.com/user-attachments/assets/df256e9b-acdb-421f-bfb7-eafa37b6bed7" />
+
 Application screenshots can be added here:
 
 - Login and registration interface.
