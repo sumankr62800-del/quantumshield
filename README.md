@@ -262,15 +262,15 @@ Further improvements may include:
 - Automated deployment and security regression testing.
 
 ## 📸 Screenshots
-
-<img width="580" height="832" alt="image" src="https://github.com/user-attachments/assets/df256e9b-acdb-421f-bfb7-eafa37b6bed7" />
-
-Application screenshots can be added here:
-
 - Login and registration interface.
+<img width="580" height="832" alt="image" src="https://github.com/user-attachments/assets/df256e9b-acdb-421f-bfb7-eafa37b6bed7" />
 - Main dashboard.
+- <img width="1403" height="910" alt="image" src="https://github.com/user-attachments/assets/ea17dd1e-f285-4f8d-9e2d-3493098c1022" />
 - Secure messaging interface.
+- <img width="1338" height="666" alt="image" src="https://github.com/user-attachments/assets/4eaa4c07-b0a9-4a0f-a722-3fb351ea41c6" />
 - Security monitoring interface.
+- <img width="1335" height="690" alt="image" src="https://github.com/user-attachments/assets/d6b392a0-4bd7-467b-963b-996c9f95c7fb" />
+
 
 ## 🚀 Future Enhancements
 
