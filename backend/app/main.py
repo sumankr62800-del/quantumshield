@@ -92,6 +92,26 @@ app.add_middleware(
 
 
 # ============================================================
+# SECURITY RESPONSE HEADERS
+# ============================================================
+
+@app.middleware("http")
+async def add_security_headers(request, call_next):
+    response = await call_next(request)
+
+    # Prevent browsers from MIME-sniffing responses.
+    response.headers["X-Content-Type-Options"] = "nosniff"
+
+    # Prevent the API response from being displayed in frames.
+    response.headers["X-Frame-Options"] = "DENY"
+
+    # Prevent referrer information from being sent.
+    response.headers["Referrer-Policy"] = "no-referrer"
+
+    return response
+
+
+# ============================================================
 # ROOT ENDPOINT
 # ============================================================
 

@@ -1,5 +1,14 @@
+
 from datetime import datetime, timezone
-from sqlalchemy import Column, DateTime, Integer, String, Text
+
+from sqlalchemy import (
+    Column,
+    DateTime,
+    Integer,
+    String,
+    Text,
+    ForeignKey,
+)
 
 from backend.app.database.connection import Base
 
@@ -7,17 +16,56 @@ from backend.app.database.connection import Base
 class SecurityEvent(Base):
     __tablename__ = "security_events"
 
-    id = Column(Integer, primary_key=True, index=True)
+    # ========================================================
+    # PRIMARY KEY
+    # ========================================================
 
-    user_id = Column(Integer, nullable=True, index=True)
+    id = Column(
+        Integer,
+        primary_key=True,
+        index=True,
+    )
 
-    event_type = Column(String(100), nullable=False, index=True)
+    # ========================================================
+    # USER REFERENCE
+    # ========================================================
 
-    severity = Column(String(20), nullable=False, default="LOW")
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
-    description = Column(Text, nullable=True)
+    # ========================================================
+    # SECURITY EVENT DETAILS
+    # ========================================================
 
-    ip_address = Column(String(45), nullable=True)
+    event_type = Column(
+        String(100),
+        nullable=False,
+        index=True,
+    )
+
+    severity = Column(
+        String(20),
+        nullable=False,
+        default="LOW",
+    )
+
+    description = Column(
+        Text,
+        nullable=True,
+    )
+
+    ip_address = Column(
+        String(45),
+        nullable=True,
+    )
+
+    # ========================================================
+    # EVENT TIMESTAMP
+    # ========================================================
 
     created_at = Column(
         DateTime,
